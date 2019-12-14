@@ -1,0 +1,6 @@
+= Julia set real-time rendering demo
+
+Mouse interactive Julia set real-time rendering demo using WebGL.
+
+
+Visit https://monman53.github.io/demos/juliaset/.
