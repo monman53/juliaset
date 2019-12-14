@@ -1,0 +1,241 @@
+<title>Julia set live demo : WebGL</title>
+<meta charset="UTF-8">
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<meta name='description' content='Julia set live demo using WebGL.'>
+<!-- <script src='https://cdn.jsdelivr.net/npm/vue/dist/vue.js'></script> -->
+<script src='vue.min.js'></script>
+<script src='three.min.js'></script>
+<style>
+body {
+    margin: 0;
+}
+</style>
+
+<div id='app'>
+    <canvas id='canvas' v-on:touchmove='touchMove' v-on:mousemove='mouseMove' v-on:mousedown='mouseDown'></canvas>
+    <div style='position: fixed;top: 0;left: 0; color: white; padding: 1rem; background-color: #0008'>
+        <input type='range' v-model='uniforms.range.value.x' min='0.1' max='4' step='0.1'>
+                                rx {{uniforms.range.value.x}}<br>
+        <input type='range' v-model='uniforms.range.value.y' min='0.1' max='4' step='0.1'>
+                                ry {{uniforms.range.value.y}}<br>
+        <input type='range' v-model='uniforms.mouseRange.value' min='0.1' max='2' step='0.1'>
+                        mouseRange {{uniforms.mouseRange.value}}<br>
+        <input type='range' v-model='uniforms.maxItr.value' min='1' max='1024' step='1'>
+                            maxItr {{uniforms.maxItr.value}}<br>
+        <input type='range' v-model='uniforms.shadow.value' min='0.01' max='4' step='0.01'> 
+                            shadow {{uniforms.shadow.value}}<br>
+        <input type='range' v-model='uniforms.d.value' min='1' max='64' step='1'> 
+                                 d {{uniforms.d.value}}<br>
+        <div v-for='c in color'>
+            <input type='range' v-model='c.a' min='0' max='1' step='0.01'>
+                <input type='color' v-model='c.rgb'>
+                <input type='text'  v-model='c.rgb' size='7'><br>         
+        </div>
+        <button type='button' v-on:click='save'>Save</button><br>
+    </div>
+</div>
+
+<script type="x-shader/x-fragment" id="fs">
+uniform vec2 size, mouse, range;
+uniform float mouseRange, shadow, d;
+uniform int maxItr;
+uniform vec4 c[5];
+
+float julia(vec2 z, vec2 c) {
+    vec2 nz;
+    int i;
+    float x_tmp;
+    for(int itr=0;itr<1024;itr++){
+        i = itr;
+        if(dot(z, z) >= 65536. || itr >= maxItr) break;
+
+        x_tmp = z.x*z.x - z.y*z.y + c.x;
+        z.y = 2.*z.x*z.y + c.y;
+        z.x = x_tmp;
+    }
+
+    float nu = 0.0;
+    if(i < maxItr){
+        float log_zn = log(dot(z, z)) * 0.5;
+        nu = log(log_zn / log(2.0))/log(2.0);
+    }
+
+    return (float(i+1)-nu)/float(maxItr);
+}
+
+float smooth(float x) {
+    return smoothstep(0., 1., x);
+}
+
+vec4 color(float x) {
+    if(x < c[1].a){
+        return mix(c[0], c[1], smooth((x-c[0].a)/(c[1].a-c[0].a)));
+    }else if(x < c[2].a){
+        return mix(c[1], c[2], smooth((x-c[1].a)/(c[2].a-c[1].a)));
+    }else if(x < c[3].a){
+        return mix(c[2], c[3], smooth((x-c[2].a)/(c[3].a-c[2].a)));
+    }else if(x < c[4].a){
+        return mix(c[3], c[4], smooth((x-c[3].a)/(c[4].a-c[3].a)));
+    }else{
+        return mix(c[4], c[0], smooth((x-c[4].a)/(1.0-c[4].a)));
+    }
+}
+
+vec4 pattern(float f) {
+    f = pow(f, shadow);
+    // return color(mod(f, 1.0/d)*d);
+    return color(mod(f, 1./d)*d);
+}
+
+void main() {
+    float r = size.x*range.y > range.x*size.y ? range.y/size.y : range.x/size.x;
+    vec2 z = (gl_FragCoord.xy - 0.5*size)*r;
+    vec2 c = (mouse - 0.5*size)*r*mouseRange;
+
+    // antialiasing
+    float dl = r * 0.5; 
+    vec4 col = vec4(0.);
+    col += pattern(julia(z+vec2(dl*0., dl*0.), c));
+    col += pattern(julia(z+vec2(dl*0., dl*1.), c));
+    col += pattern(julia(z+vec2(dl*1., dl*0.), c));
+    col += pattern(julia(z+vec2(dl*1., dl*1.), c));
+    col *= 0.25;
+
+    // output
+    gl_FragColor = col;
+}
+</script>
+
+<script>
+
+var app = new Vue({
+    el: "#app",
+    data: {
+        canvas: null,
+        renderer: null,
+        scene: null,
+        camera: null,
+        mouse: true, 
+        uniforms: {
+            range:      {type: 'v2',    value: new THREE.Vector2(3.5, 2.5)},
+            size:       {type: 'v2',    value: new THREE.Vector2(0., 0.)},
+            mouse:      {type: 'v2',    value: new THREE.Vector2(0., 0.)}, 
+            maxItr:     {type: 'int',   value: 128}, 
+            mouseRange: {type: 'float', value: 0.7}, 
+            shadow:     {type: 'float', value: 1.0}, 
+            d:          {type: 'float', value: 5.0}, 
+            c:          {type: 'v4v',   value: [
+                new THREE.Vector4(  0./255.,   7./255.,  30./255., 0.0   ),
+                new THREE.Vector4( 32./255., 107./255., 203./255., 0.16  ),
+                new THREE.Vector4(237./255., 255./255., 255./255., 0.42  ),
+                new THREE.Vector4(255./255., 140./255.,   0./255., 0.6425),
+                new THREE.Vector4(  0./255.,   2./255.,   0./255., 0.8575),
+            ]},
+        },
+        color: [
+            {rgb: "#00071e", a: 0.},
+            {rgb: "#206bcb", a: 0.16},
+            {rgb: "#edffff", a: 0.42},
+            {rgb: "#ff8c00", a: 0.6425},
+            {rgb: "#000200", a: 0.8575},
+        ],
+    },
+    watch: {
+        uniforms: {
+            handler: function() {
+                window.requestAnimationFrame(this.draw);
+            },
+            deep: true, 
+        },
+        color: {
+            handler: function() {
+                // window.requestAnimationFrame(this.draw);
+                for(var i=0;i<5;i++){
+                    var r = parseInt("0x"+this.color[i].rgb.substring(1, 3))/255.;
+                    var g = parseInt("0x"+this.color[i].rgb.substring(3, 5))/255.;
+                    var b = parseInt("0x"+this.color[i].rgb.substring(5, 7))/255.;
+                    this.uniforms.c.value[i] = new THREE.Vector4(r, g, b, this.color[i].a);
+                }
+                window.requestAnimationFrame(this.draw);
+            },
+            deep: true, 
+        },
+    }, 
+    mounted: function() {
+        this.canvas  = document.getElementById('canvas');
+        var w = window.innerWidth;
+        var h = window.innerHeight;
+        this.canvas.width  = w;
+        this.canvas.height = h;
+
+        // prepare webgl with Three.js
+        this.renderer = new THREE.WebGLRenderer({canvas: this.canvas});
+        this.scene    = new THREE.Scene();
+        this.camera   = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5, -1, 1);
+        this.camera.position.z = 1;
+        this.scene.add(this.camera)
+
+        // uniforms for shader
+        this.uniforms.size.value  = new THREE.Vector2(w, h);
+        this.uniforms.mouse.value = new THREE.Vector2(w*0.5, h*0.5);
+
+        // prepare shaders
+        var screenShaderMaterial = new THREE.ShaderMaterial({
+            fragmentShader: document.getElementById('fs').textContent,
+            uniforms: this.uniforms,
+        });
+
+        // set plane
+        var plane = new THREE.PlaneGeometry(1.0, 1.0);
+        var mesh = new THREE.Mesh(plane, screenShaderMaterial);
+        this.scene.add(mesh);
+
+        // add resize handler
+        window.addEventListener('resize',           this.resize)
+        window.addEventListener('fullscreenchange', this.resize)
+
+        this.draw();
+    },
+    methods: {
+        draw: function() {
+            this.renderer.render(this.scene, this.camera);
+        },
+        mouseMove: function(event) {
+            if(this.mouse){
+                this.uniforms.mouse.value.x = event.offsetX;
+                this.uniforms.mouse.value.y = event.offsetY;
+            }
+        }, 
+        touchMove: function() {
+            this.uniforms.mouse.value.x = event.targetTouches[0].clientX;
+            this.uniforms.mouse.value.y = event.targetTouches[0].clientY;
+        }, 
+        mouseDown: function() {
+            this.mouse = !this.mouse;
+        },
+        resize: function() {
+            var w = window.innerWidth;
+            var h = window.innerHeight;
+            this.uniforms.size.value.x = w;
+            this.uniforms.size.value.y = h;
+            this.canvas.width  = w;
+            this.canvas.height = h;
+            this.canvas.style.width  = w;
+            this.canvas.style.height = h;
+
+            this.renderer = new THREE.WebGLRenderer({canvas: this.canvas});
+
+            window.requestAnimationFrame(this.draw);
+        },
+        save: function() {
+            this.renderer.render(this.scene, this.camera);
+            var screenshot = this.renderer.domElement.toDataURL();
+            var link = document.createElement("a");
+            link.href = screenshot;
+            link.download = 'out.png';
+            link.click();
+            delete link;
+        },
+    }, 
+});
+</script>
