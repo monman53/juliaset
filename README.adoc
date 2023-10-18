@@ -3,7 +3,7 @@
 Mouse interactive Julia set real-time rendering demo using WebGL.
 
 
-Visit https://monman53.github.io/demos/juliaset/.
+Visit https://monman53.github.io/juliaset/.
 
 
-image:./screenshot.png[Screenshot, link=https://monman53.github.io/demos/juliaset/]
+image:./screenshot.png[Screenshot, link=https://monman53.github.io/juliaset/]
